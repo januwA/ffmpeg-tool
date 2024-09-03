@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const vm = require('node:vm')
 const { promisify } = require('node:util')
 
+
 /**
  * 
  * from到to过去了多少秒
@@ -24,39 +25,40 @@ ffmpeg
 -i "b.mp4"
 -i "c.mp4"
 
+/* 过滤器链：由一系列以","逗号分隔的过滤器描述列表表示 */
+/* 过滤器图：由一系列过滤器链组成。过滤器图列由一系列以";"分号分割 */
+/* 过滤器参数以":"冒号分割，键=值对列表、值列表  */
+
 -filter_complex "
 
-/* 过滤器链由一系列以","逗号分隔的过滤器描述列表表示 */
-/* 过滤器图由一系列过滤器链组成。过滤器链序列由一系列以";"分号分割 */
-
-/* trim 切片输入的视频, setpts 更改输入帧的 PTS, scale 统一分辨率 */
+// trim 切片输入的视频, setpts 更改输入帧的 PTS, scale 统一分辨率
 [0:v]trim=0:10,  setpts=PTS-STARTPTS, setpts=0.5*PTS,  scale=1280:720 [v0]; 
 [1:v]trim=10:20, setpts=PTS-STARTPTS, setpts=0.5*PTS, scale=1280:720 [v1]; 
 [0:v]trim=15:30, setpts=PTS-STARTPTS, setpts=1/1.2*PTS, scale=1280:720 [v2]; 
 
-/* 过滤器参数以":"冒号分割，键=值对列表、值列表  */
-/* concat 合并输出 */
-[v0][v1][v2] concat=n=3:v=1:a=0 [ov]"
+// concat 合并输出
+[v0][v1][v2] concat=n=3:v=1:a=0 [ov];
+"
 
-/* 输出的视频 */
+// 输出的视频
 -map "[ov]" 
 
-/* 输出的音频 */
+// 输出的音频
 -map 2:a:0 -shortest 
 
-/* 输出帧速率 */
+// 输出帧速率
 -r 60 
 
-/* 视频比特率 */
+// 视频比特率
 -b:v 800k
 
-/* 选择视频流的编码器/解码器 */
+// 选择视频流的编码器/解码器
 -c:v mpeg4 
 
-/* 使用ffplay预览 */
+// 使用ffplay预览
 -f mpegts - | ffplay -`.trimStart();
 
-let vm = new Vue({
+let vvm = new Vue({
   el: '#app',
   data() {
     let filter_complex_command_text = localStorage.getItem('filter_complex_command_text');
@@ -663,93 +665,33 @@ page down/page up
       } else {
         command_content = content;
       }
-      const tokens = [];
-      let token = null;
-      let i = 0;
-      let text = '';
-      let status = 0;
-      let escapeCharacter = false;
-      let escapeCharacterIndex = -1;
 
-      while (true) {
-        let c = script_content[i];
-        if (c === undefined) break;
+      let context = {};
+      let command = command_content;
 
-        switch (c) {
-          case '\r':
-          case '\n':
-          case '\t':
-            break;
-          case '\\':
-            escapeCharacter = true;
-            escapeCharacterIndex = i;
-            break
-          case '(':
-            // console.log(status, text);
-            if (text == 'def' && !escapeCharacter) {
-              tokens.push({ king: 'def', name: '', value: '' })
-              text = '';
-              status = 1; // 开始记录 def name
-            } else {
-              text += c;
-            }
-            break;
-          case ',':
-            // console.log(status, text);
-            if (status == 1 && !escapeCharacter) {
-              token = tokens.at(-1);
-              token.name = text;
-              text = '';
-              status = 2; // 开始记录 def value
-            } else {
-              text += c;
-            }
-            break
-          case ')':
-            if (status == 2 && !escapeCharacter) {
-              token = tokens.at(-1);
-              token.value = text;
-              text = '';
-              status = 0; // def 记录结束
-            } else {
-              text += c;
-            }
-            break;
-          default:
-            // 默认跳过空格，但是在记录某些value时保留空格
-            if (c == ' ' && status != 2) {
-              break;
-            }
-
-            // 使用了反斜杠，但是不是脚本的特殊字符则补上反斜杠，避免在路径上进行多余的操作
-            if (escapeCharacter) {
-              text += '\\';
-            }
-
-            text += c;
-            break;
+      // 如果使用了脚本
+      if (script_content.trim().length) {
+        context = vm.runInNewContext(`let context = ${script_content}; context;`, {});
+        context = {
+          path,
+          fs,
+          promisify,
+          ...context,
         }
-
-        if (escapeCharacter && escapeCharacterIndex != i) {
-          escapeCharacter = false;
-        }
-        i++;
+        vm.createContext(context);
+        command = command.replace(/<js>([\s\S]*?)<\/js>/gi, (match, ...groups) => {
+          return vm.runInContext(groups[0], context) || '';
+        });
       }
-      // console.log(tokens);
-      let command = command_content
-      .replace(/def\(([^\)]+)\)/g, (match, ...groups) => {
-        let name = groups[0]?.trim() ?? undefined;
-        if (name) {
-          let token = tokens.find(e => e.king === 'def' && e.name == name);
-          if (token) return token.value;
-        }
-        console.error(`not find def "${name}"`);
-        return match;
-      })
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/[\r\n]/g, ' ')
-      .replace(/\s+/g, ' ');
+
+      command = command.replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '')
+        .replace(/[\r\n]/g, ' ')
+        .replace(/\s+/g, ' ');
+
+      console.log(command);
       this.commandText = command;
+
       child_process.exec((command.includes('ffplay ') ? '' : "start ") + command, (err, stdout, stderr) => {
         if (err) {
           return console.error(err);
