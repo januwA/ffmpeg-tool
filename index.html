@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>ffmpeg tool</title>
+  <style>
+    .row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .row2 {
+      display: flex;
+      align-items: center;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    textarea {
+      font-size: 1rem;
+      font-family: consola;
+    }
+  </style>
+</head>
+
+<body>
+  <main id="app" class="col">
+    <fieldset>
+      <legend>输入</legend>
+      <div class="col">
+        <div class="row">
+          <button @click="getinput">选择输入文件</button>
+          <input style="flex: 1;" type="text" v-model="input" />
+          <button title="同目录上一个资源" :disabled="!input" @click="changeInput(-1)">◀️</button>
+          <button title="同目录下一个资源" :disabled="!input" @click="changeInput(1)">▶️</button>
+        </div>
+        <div class="row">
+          <label> <input type="checkbox" v-model="displayCommand" /> 命令窗口 </label>
+          <label> <input type="checkbox" v-model="notExec" /> 不执行 </label>
+          <label> <input type="checkbox" v-model="output_ffplay" /> 输出到ffplay </label>
+        </div>
+        <div class="row" v-show="commandText">
+          <span> 命令: </span>
+          <input style="flex: 1;" type="text" v-model="commandText">
+          <button @click="exec(commandText)">执行</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>播放</legend>
+      <div class="row">
+        <label> <input type="checkbox" v-model="playOpt.isLoopPlay" /> 循环 </label>
+        <label> <input type="checkbox" v-model="playOpt.t_noborder" /> 无边框 </label>
+        <label> <input type="checkbox" v-model="playOpt.t_vn" /> 禁用视频 </label>
+        <label> <input type="checkbox" v-model="playOpt.t_an" /> 禁用音频 </label>
+        <div class="row2">
+          <label> <input type="checkbox" v-model="playOpt.t_subtitles" /> 字幕(mkv) </label>
+          <input type="text" v-model="playOpt.t_subtitles_si" style="width: 20px;" placeholder="si">
+        </div>
+        <label> 倍速 <input type="text" v-model="playOpt.t_setpts" style="width: 20px;"> </label>
+        <input type="text" v-model="playOpt.t_size" style="width: 100px;" />
+        <button :disabled="!input" @click="ffplay(false)">播放</button>
+        <button @click="ffplayMessage">播放时?</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>普通工具</legend>
+      <div class="row">
+        <button :disabled="!input" @click="Remove_Video_Audio">去掉视频音轨</button>
+        <button :disabled="!input" @click="Get_Video_Audio">提取视频音轨(mp3)</button>
+        <div class="row2">
+          <button :disabled="!input || !Set_Video_Volume_value" @click="Set_Video_Volume">调整视频音量</button>
+          <input style="width: 25px;" type="text" v-model="Set_Video_Volume_value">
+        </div>
+        <button :disabled="!input" @click="Download_M3U8_To_Mp4">下载m3u8到MP4</button>
+        <button :disabled="!input" @click="Convert_Video_Format_To_Mp4">转为MP4</button>
+        <button :disabled="!input" @click="ffprobe">ffprobe</button>
+      </div>
+    </fieldset>
+
+
+    <fieldset>
+      <legend>合并音视频</legend>
+      <div class="col">
+        <div class="row">
+          <button @click="Open_Audio_Dialog">选择音频</button>
+          <input style="flex: 1;" type="text" v-model="mergeAudioVideo.input" />
+        </div>
+        <div class="row">
+          <label> <input type="checkbox" v-model="mergeAudioVideo.isAmix" /> 混音 </label>
+          <button :disabled="!input || !mergeAudioVideo.input" @click="Audio_full_video">音频填充视频</button>
+          <button :disabled="!input || !mergeAudioVideo.input" @click="Video_full_audio">视频填充音频</button>
+          <button :disabled="!input || !mergeAudioVideo.input" @click="merge_audio">合并两个音频</button>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>获取视频片段</legend>
+      <div class="col">
+        <div class="row">
+          从<input type="text" v-model="getVideoCut.begin1" style="width: 100px;">开始裁剪<input type="text"
+            v-model="getVideoCut.end1" style="width: 100px;">秒
+          <button :disabled="!input" @click="cut_video_time">裁剪</button>
+        </div>
+        <div class="row">
+          从<input type="text" v-model="getVideoCut.begin2" style="width: 100px;">开始, 到<input type="text"
+            v-model="getVideoCut.end2" style="width: 100px;">结束
+          <button :disabled="!input" @click="cut_video_to">裁剪</button>
+        </div>
+        <div class="row">
+          从<input type="text" v-model="getVideoCut.begin3" style="width: 100px;">开始, 到视频结束
+          <button :disabled="!input" @click="cut_video_to_end">裁剪</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>裁剪视频</legend>
+      <div class="row">
+        <label> w: <input type="text" style="width: 100px;" v-model="cropVideo.w" /> </label>
+        <label> h: <input type="text" style="width: 100px;" v-model="cropVideo.h" /> </label>
+        <label> x: <input type="text" style="width: 100px;" v-model="cropVideo.x" /> </label>
+        <label> y: <input type="text" style="width: 100px;" v-model="cropVideo.y" /> </label>
+        <button :disabled="!input" @click="crop_video">裁剪</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>切片与合并</legend>
+      <div class="col">
+        <div class="row">
+          每片时长(大概):
+          <input type="text" style="width: 80px;" value="00:01:00" ref="split_video_time_input">
+          输出文件后缀:
+          <input type="text" style="width: 20px;" value=".ts" ref="split_video_ext_input">
+          num:
+          <input type="text" style="width: 20px;" value="8" ref="split_video_num_input">
+          <button :disabled="!input" @click="split_video">开始分片</button>
+        </div>
+        <div class="row">
+          输入配置文件后
+          <button :disabled="!input" @click="merge_split_video">合并</button>
+        </div>
+        <div class="row">
+          输入一个片视频后
+          <button :disabled="!input" @click="create_merge_config_file">生成合并配置文件</button>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Gif🔁Video</legend>
+      <div class="col">
+        <div class="row">
+          <button :disabled="!input" @click="gif_to_mp4">GIF转mp4</button>
+          <button :disabled="!input" @click="gif_to_webm">GIF转webm</button>
+        </div>
+        <div class="row">
+          <input type="text" value="00:00:00" style="width: 60px;" ref="video_to_gif_from_input"> 至 <input type="text"
+            value="00:00:10" style="width: 60px;" ref="video_to_gif_to_input">
+          <label>fps: <input type="text" value="10" style="width: 20px;" ref="video_to_gif_fps_input"></label>
+          <label>w: <input type="text" value="320" style="width: 50px;" ref="video_to_gif_w_input"></label>
+          <label>h: <input type="text" value="-1" style="width: 50px;" ref="video_to_gif_h_input"></label>
+          <button :disabled="!input" @click="Video_To_Gif">视频转GIF</button>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>提取帧</legend>
+      <div class="col">
+        <div class="row">
+          <input type="text" value="00:00:00" ref="input_1" style="width: 60px;">
+          至
+          <input type="text" value="00:00:10" ref="input_2" style="width: 60px;">
+          每秒取
+          <input type="text" value="1" ref="input_3" style="width: 20px;">
+          帧
+          <label>num: <input type="text" value="8" ref="input_4" style="width: 20px;"></label>
+          <button :disabled="!input" @click="extract_frames_from_video">获取图片</button>
+        </div>
+        <div class="row">
+          输入一张帧图片后
+          <label>num: <input type="text" value="8" ref="input_5" style="width: 20px;"></label>
+          <button :disabled="!input" @click="frames_to_video">合成MP4</button>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>图片格式转换</legend>
+      <div class="row">
+        <input type="text" value=".webp" ref="input_6" style="width: 50px;">
+        <button :disabled="!input" @click="Convert_Image_Format">转换</button>
+        <button :disabled="!input" @click="Convert_Images_Format">批量转换</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>转换视频帧率/比特率</legend>
+      <div class="row">
+        <div class="row2">
+          <button :disabled="!input" @click="Convert_video_frame_rate">帧率转为</button>
+          <input type="text" value="30" ref="input_7" style="width: 20px;">
+          fps
+        </div>
+        <div class="row2">
+          <button :disabled="!input" @click="Convert_video_bitrate">比特率转为</button>
+          <input type="text" value="800k" ref="input_8" style="width: 50px;">
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>音频格式转换</legend>
+      <div class="row">
+        <input type="text" value=".mp3" ref="input_9" style="width: 50px;">
+        <button :disabled="!input" @click="Convert_Audio_Format">转换</button>
+      </div>
+    </fieldset>
+    <hr />
+    <fieldset>
+      <legend>复杂过滤器 filter_complex</legend>
+      <div class="col">
+        <textarea v-model="filter_complex_command_text" rows="20"></textarea>
+        <div class="row">
+          <button :disabled="!filter_complex_command_text" @click="exec_filter_complex_command">执行</button>
+          <a href="https://ffmpeg.org/ffmpeg-filters.html" target="_blank" rel="noreferrer">filters doc</a>
+          <code>-f mpegts - | ffplay -</code>
+          <button @click="reset_filter_complex_command_text">重置</button>
+        </div>
+      </div>
+    </fieldset>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.7.16/vue.min.js"></script>
+  <script src="./renderer.js"></script>
+</body>
+
+</html>
