@@ -671,7 +671,11 @@ page down/page up
 
       // 如果使用了脚本
       if (script_content.trim().length) {
-        context = vm.runInNewContext(`let context = ${script_content}; context;`, {});
+        context = vm.runInNewContext(`let context = ${script_content}; context;`, {
+          path,
+          fs,
+          promisify,
+        });
         context = {
           path,
           fs,
