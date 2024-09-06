@@ -179,7 +179,7 @@ let vvm = new Vue({
       this.commandText = command;
 
       // start 可以显示控制台，展示更多信息
-      if (this.displayCommand && !command.includes('ffplay ')) {
+      if (this.displayCommand && !command.includes(' ffplay ')) {
         command = 'start ' + command;
       }
 
